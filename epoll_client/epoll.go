@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"sync"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 type epoll struct {
@@ -33,8 +35,10 @@ func (e *epoll) Add(conn net.Conn) error {
 	if err != nil {
 		return err
 	}
+
 	e.lock.Lock()
 	defer e.lock.Unlock()
+
 	e.connections[fd] = conn
 	if len(e.connections)%100 == 0 {
 		log.Printf("total number of connections: %v", len(e.connections))
@@ -48,6 +52,7 @@ func (e *epoll) Remove(conn net.Conn) error {
 	if err != nil {
 		return err
 	}
+
 	e.lock.Lock()
 	defer e.lock.Unlock()
 	delete(e.connections, fd)
@@ -63,6 +68,7 @@ func (e *epoll) Wait() ([]net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	e.lock.RLock()
 	defer e.lock.RUnlock()
 	var connections []net.Conn
@@ -74,13 +80,7 @@ func (e *epoll) Wait() ([]net.Conn, error) {
 }
 
 func socketFD(conn net.Conn) int {
-	//tls := reflect.TypeOf(conn.UnderlyingConn()) == reflect.TypeOf(&tls.Conn{})
-	// Extract the file descriptor associated with the connection
-	//connVal := reflect.Indirect(reflect.ValueOf(conn)).FieldByName("conn").Elem()
 	tcpConn := reflect.Indirect(reflect.ValueOf(conn)).FieldByName("conn")
-	//if tls {
-	//	tcpConn = reflect.Indirect(tcpConn.Elem())
-	//}
 	fdVal := tcpConn.FieldByName("fd")
 	pfdVal := reflect.Indirect(fdVal).FieldByName("pfd")
 	return int(pfdVal.FieldByName("Sysfd").Int())

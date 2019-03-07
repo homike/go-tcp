@@ -1,11 +1,15 @@
 package main
 
 import (
+	"io"
 	"log"
 	"net"
 	"net/http"
+
+	metrics "github.com/rcrowley/go-metrics"
 )
 
+var opsRate = metrics.NewRegisteredMeter("ops", nil)
 var epoller *epoll
 
 func main() {
@@ -23,7 +27,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
 	go start()
+
 	for {
 		conn, e := ln.Accept()
 		if e != nil {
@@ -40,6 +46,7 @@ func main() {
 		}
 	}
 }
+
 func start() {
 	var buf = make([]byte, 8)
 	for {
@@ -52,12 +59,15 @@ func start() {
 			if conn == nil {
 				break
 			}
-			if _, err := conn.Read(buf); err != nil {
+			_, err = io.CopyN(conn, conn, 8)
+			if err != nil {
 				if err := epoller.Remove(conn); err != nil {
-					log.Printf("failed to remove %v", err)
+					log.Print("epoller remove error")
 				}
 				conn.Close()
 			}
+
+			opsRate.Mark(1)
 		}
 	}
 }
